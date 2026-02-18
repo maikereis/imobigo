@@ -53,38 +53,14 @@ func generateContext(browser playwright.Browser) (playwright.BrowserContext, err
 	return context, nil
 }
 
-func main() {
-	pw, err := playwright.Run()
-	if err != nil {
-		log.Fatalf("could not start playwright: %v", err)
-	}
-	browser, err := pw.Chromium.Launch(playwright.BrowserTypeLaunchOptions{
-		Headless: playwright.Bool(false),
-		Channel:  playwright.String("chrome"),
-		SlowMo:   playwright.Float(200),
-	})
-	if err != nil {
-		log.Fatalf("could not launch browser: %v", err)
-	}
-
-	context, err := generateContext(browser)
-	if err != nil {
-		log.Fatalf("could not generate context: %v", err)
-	}
-
-	page, err := context.NewPage()
-	if err != nil {
-		log.Fatalf("could not create page: %v", err)
-	}
-	if _, err = page.Goto(URL); err != nil {
-		log.Fatalf("could not goto: %v", err)
-	}
+func extractLinks(page playwright.Page) ([]string, error) {
 
 	ulLocator := page.Locator("xpath=/html/body/section/div[1]/div[3]/div[4]/div[1]/ul")
 
-	err = ulLocator.WaitFor(playwright.LocatorWaitForOptions{
+	err := ulLocator.WaitFor(playwright.LocatorWaitForOptions{
 		State: playwright.WaitForSelectorStateVisible,
 	})
+
 	if err != nil {
 		log.Fatalf("advertisements list not found: %v", err)
 	}
@@ -179,7 +155,76 @@ func main() {
 		}
 	}
 
+	return hrefs, err
+}
+
+func main() {
+	pw, err := playwright.Run()
+	if err != nil {
+		log.Fatalf("could not start playwright: %v", err)
+	}
+	browser, err := pw.Chromium.Launch(playwright.BrowserTypeLaunchOptions{
+		Headless: playwright.Bool(false),
+		Channel:  playwright.String("chrome"),
+		SlowMo:   playwright.Float(200),
+	})
+	if err != nil {
+		log.Fatalf("could not launch browser: %v", err)
+	}
+
+	context, err := generateContext(browser)
+	if err != nil {
+		log.Fatalf("could not generate context: %v", err)
+	}
+
+	page, err := context.NewPage()
+	if err != nil {
+		log.Fatalf("could not create page: %v", err)
+	}
+	if _, err = page.Goto(URL); err != nil {
+		log.Fatalf("could not goto: %v", err)
+	}
+
+	//hrefs, err := extractLinks(page)
+	hrefs := []string{"https://www.vivareal.com.br/imovel/casa-3-quartos-belem-velho-porto-alegre-com-garagem-12m2-aluguel-RS1750-id-2870890775/?source=ranking%2Crp"}
+
 	fmt.Printf("\nTotal hrefs collected: %d\n", len(hrefs))
+	fmt.Println(hrefs[0])
+
+	pageToScrap, err := context.NewPage()
+	if err != nil {
+		log.Fatalf("could not create page: %v", err)
+	}
+	if _, err = pageToScrap.Goto(hrefs[0]); err != nil {
+		log.Fatalf("could not goto: %v", err)
+	}
+
+	time.Sleep(2 * time.Second)
+
+	title, err := pageToScrap.Locator("h2.text-neutral-130.font-semibold").First().InnerText()
+	if err != nil {
+		log.Printf("could not get title: %v", err)
+	}
+	fmt.Println("Title:", title)
+
+	pageToScrap.Evaluate(`window.scrollTo(0, document.body.scrollHeight / 5)`)
+	time.Sleep(1 * time.Second)
+
+	_, err = pageToScrap.WaitForSelector(`[data-testid="amenities-list"]`)
+	if err != nil {
+		log.Fatalf("amenities list not found: %v", err)
+	}
+
+	amenitySpans, err := pageToScrap.Locator(`span.amenities-item-text`).All()
+	if err != nil {
+		log.Fatalf("could not get amenity spans: %v", err)
+	}
+
+	fmt.Printf("Found %d amenities\n", len(amenitySpans))
+	for _, span := range amenitySpans {
+		text, _ := span.InnerText()
+		fmt.Println("Amenity:", text)
+	}
 
 	if err = browser.Close(); err != nil {
 		log.Fatalf("could not close browser: %v", err)
@@ -188,3 +233,4 @@ func main() {
 		log.Fatalf("could not stop Playwright: %v", err)
 	}
 }
+
