@@ -95,12 +95,14 @@ func main() {
 	fmt.Printf("found %d advertisements\n", len(liLocators))
 
 	for i, card := range liLocators {
-		text, err := card.InnerText()
-		if err != nil {
-			log.Printf("err trying to read card %d: %v", i, err)
-			continue
+		expandBtn := card.Locator("button:has-text('Ver'), a:has-text('Ver')")
+		btnCount, _ := expandBtn.Count()
+
+		if btnCount > 0 {
+			fmt.Printf("Has expand button with %d advertisements in card %d\n", btnCount, i)
+		} else {
+			fmt.Printf("No expand button found in card %d\n", i)
 		}
-		fmt.Printf("card %d: %s\n", i+1, text)
 	}
 
 	if err = browser.Close(); err != nil {
