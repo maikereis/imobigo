@@ -158,6 +158,64 @@ func extractLinks(page playwright.Page) ([]string, error) {
 	return hrefs, err
 }
 
+type Listing struct {
+    Title       string   `json:"title"`
+    Amenities   []string `json:"amenities"`
+    Description string   `json:"description"`
+    Updated     string   `json:"updated"`
+}
+
+func scrapeContent(page playwright.Page) (Listing, error) {
+	listing := Listing{}
+
+	title, err := page.Locator("h2.text-neutral-130.font-semibold").First().InnerText()
+	if err != nil {
+		log.Printf("could not get title: %v", err)
+	}
+	fmt.Println("Title:", title)
+
+
+	listing.Title = title
+
+	//pageToScrap.Evaluate(`window.scrollTo(0, document.body.scrollHeight / 5)`)
+	//time.Sleep(1 * time.Second)
+
+	_, err = page.WaitForSelector(`[data-testid="amenities-list"]`)
+	if err != nil {
+		log.Fatalf("amenities list not found: %v", err)
+	}
+
+	amenitySpans, err := page.Locator(`span.amenities-item-text`).All()
+	if err != nil {
+		log.Fatalf("could not get amenity spans: %v", err)
+	}
+
+	var spansTexts []string; 
+	for _, span := range amenitySpans {
+		text, _ := span.InnerText()
+		spansTexts = append(spansTexts, text)
+		fmt.Println("Amenity:", text)
+	}
+
+	listing.Amenities = spansTexts
+
+	descriptionText, err := page.Locator(`p.description__content--text`).First().InnerText()
+	if err != nil {
+		log.Fatalf("could not get description text: %v", err)
+	}
+
+	listing.Description = descriptionText
+
+	updatedAtDate, err := page.Locator(`span.description__created-at.text-neutral-110`).First().InnerText()
+	if err != nil {
+		log.Fatalf("could not get update date: %v", err)
+	}
+
+	listing.Updated = updatedAtDate
+
+	return listing, err
+}
+
 func main() {
 	pw, err := playwright.Run()
 	if err != nil {
@@ -199,32 +257,11 @@ func main() {
 		log.Fatalf("could not goto: %v", err)
 	}
 
-	time.Sleep(2 * time.Second)
-
-	title, err := pageToScrap.Locator("h2.text-neutral-130.font-semibold").First().InnerText()
-	if err != nil {
-		log.Printf("could not get title: %v", err)
-	}
-	fmt.Println("Title:", title)
-
-	pageToScrap.Evaluate(`window.scrollTo(0, document.body.scrollHeight / 5)`)
 	time.Sleep(1 * time.Second)
 
-	_, err = pageToScrap.WaitForSelector(`[data-testid="amenities-list"]`)
-	if err != nil {
-		log.Fatalf("amenities list not found: %v", err)
-	}
+	listing, err := scrapeContent(pageToScrap)
 
-	amenitySpans, err := pageToScrap.Locator(`span.amenities-item-text`).All()
-	if err != nil {
-		log.Fatalf("could not get amenity spans: %v", err)
-	}
-
-	fmt.Printf("Found %d amenities\n", len(amenitySpans))
-	for _, span := range amenitySpans {
-		text, _ := span.InnerText()
-		fmt.Println("Amenity:", text)
-	}
+	fmt.Printf("With field names: %+v\n", listing)
 
 	if err = browser.Close(); err != nil {
 		log.Fatalf("could not close browser: %v", err)
