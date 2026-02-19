@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+	"encoding/json"
 	"math/rand"
 	"time"
 	"log"
@@ -216,6 +218,17 @@ func scrapeContent(page playwright.Page) (Listing, error) {
 	return listing, err
 }
 
+func appendListingJSON(filename string, listing Listing) error {
+	f, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	encoder := json.NewEncoder(f)
+	return encoder.Encode(listing)
+}
+
 func main() {
 	pw, err := playwright.Run()
 	if err != nil {
@@ -260,6 +273,14 @@ func main() {
 	time.Sleep(1 * time.Second)
 
 	listing, err := scrapeContent(pageToScrap)
+	if err != nil {
+		log.Fatalf("could not scrape listing: %v", err)
+	}
+
+	err = appendListingJSON("listings.jsonl", listing)
+	if err != nil {
+		log.Printf("could not store the listing")
+	}
 
 	fmt.Printf("With field names: %+v\n", listing)
 
@@ -270,4 +291,3 @@ func main() {
 		log.Fatalf("could not stop Playwright: %v", err)
 	}
 }
-
