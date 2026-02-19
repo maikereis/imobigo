@@ -162,25 +162,28 @@ func extractLinks(page playwright.Page) ([]string, error) {
 
 type Listing struct {
     Title       string   `json:"title"`
+	Address     string   `json:"address"`
     Amenities   []string `json:"amenities"`
     Description string   `json:"description"`
     Updated     string   `json:"updated"`
+	Url 		string   `json:"url"`
 }
 
 func scrapeContent(page playwright.Page) (Listing, error) {
 	listing := Listing{}
-
 	title, err := page.Locator("h2.text-neutral-130.font-semibold").First().InnerText()
 	if err != nil {
 		log.Printf("could not get title: %v", err)
 	}
-	fmt.Println("Title:", title)
-
 
 	listing.Title = title
 
-	//pageToScrap.Evaluate(`window.scrollTo(0, document.body.scrollHeight / 5)`)
-	//time.Sleep(1 * time.Second)
+	address, err := page.Locator(`p[data-testid="location-address"]`).First().InnerText()
+	if err != nil {
+		log.Printf("could not get address: %v", err)
+	}
+
+	listing.Address = address
 
 	_, err = page.WaitForSelector(`[data-testid="amenities-list"]`)
 	if err != nil {
@@ -196,7 +199,6 @@ func scrapeContent(page playwright.Page) (Listing, error) {
 	for _, span := range amenitySpans {
 		text, _ := span.InnerText()
 		spansTexts = append(spansTexts, text)
-		fmt.Println("Amenity:", text)
 	}
 
 	listing.Amenities = spansTexts
@@ -256,33 +258,41 @@ func main() {
 		log.Fatalf("could not goto: %v", err)
 	}
 
-	//hrefs, err := extractLinks(page)
-	hrefs := []string{"https://www.vivareal.com.br/imovel/casa-3-quartos-belem-velho-porto-alegre-com-garagem-12m2-aluguel-RS1750-id-2870890775/?source=ranking%2Crp"}
-
+	hrefs, err := extractLinks(page)
+	//hrefs := []string{"https://www.vivareal.com.br/imovel/casa-3-quartos-belem-velho-porto-alegre-com-garagem-12m2-aluguel-RS1750-id-2870890775/?source=ranking%2Crp"}
 	fmt.Printf("\nTotal hrefs collected: %d\n", len(hrefs))
-	fmt.Println(hrefs[0])
+
+
+	context, err = generateContext(browser)
+	if err != nil {
+		log.Fatalf("could not generate context: %v", err)
+	}
 
 	pageToScrap, err := context.NewPage()
 	if err != nil {
 		log.Fatalf("could not create page: %v", err)
 	}
-	if _, err = pageToScrap.Goto(hrefs[0]); err != nil {
-		log.Fatalf("could not goto: %v", err)
+	defer pageToScrap.Close()
+	
+	for _, href := range hrefs {
+		_, err = pageToScrap.Goto(href)
+		if err != nil {
+			log.Printf("goto failed: %v", err)
+			continue
+		}
+
+		listing, err := scrapeContent(pageToScrap)
+		if err != nil {
+			log.Fatalf("could not scrape listing: %v", err)
+		}
+
+		listing.Url = href
+
+		err = appendListingJSON("listings.jsonl", listing)
+		if err != nil {
+			log.Printf("could not store the listing")
+		}
 	}
-
-	time.Sleep(1 * time.Second)
-
-	listing, err := scrapeContent(pageToScrap)
-	if err != nil {
-		log.Fatalf("could not scrape listing: %v", err)
-	}
-
-	err = appendListingJSON("listings.jsonl", listing)
-	if err != nil {
-		log.Printf("could not store the listing")
-	}
-
-	fmt.Printf("With field names: %+v\n", listing)
 
 	if err = browser.Close(); err != nil {
 		log.Fatalf("could not close browser: %v", err)
